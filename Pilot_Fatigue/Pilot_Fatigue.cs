@@ -19,7 +19,7 @@ namespace Pilot_Fatigue
     {
         public const string ModName = "Pilot_Fatigue";
         public const string ModId = "dZ.Zappo.Pilot_Fatigue";
-
+        public static List<string> argoUpgradeList = new List<string> { "argoUpgrade_rec_hydroponics", "argoUpgrade_rec_pool", "argoUpgrade_rec_arcade" };
         internal static ModSettings settings;
         internal static string ModDirectory;
 
@@ -88,7 +88,8 @@ namespace Pilot_Fatigue
         {
             public static void Prefix(AAR_UnitStatusWidget __instance, SimGameState ___simState)
             {
-                UnitResult unitResult = Traverse.Create(__instance).Field("UnitData").GetValue<UnitResult>();
+                //UnitResult unitResult = Traverse.Create(__instance).Field("UnitData").GetValue<UnitResult>();
+                UnitResult unitResult = __instance.UnitData;
                 if (unitResult.pilot.pilotDef.TimeoutRemaining > 0 && unitResult.pilot.Injuries == 0)
                 {
                 }
@@ -96,11 +97,10 @@ namespace Pilot_Fatigue
                 {
                     unitResult.pilot.pilotDef.PilotTags.Remove("pilot_fatigued");
                     unitResult.pilot.pilotDef.SetTimeoutTime(0);
-                    WorkOrderEntry_MedBayHeal workOrderEntry_MedBayHeal;
-                    workOrderEntry_MedBayHeal = (WorkOrderEntry_MedBayHeal)___simState.MedBayQueue.GetSubEntry(unitResult.pilot.Description.Id);
+                    //WorkOrderEntry_MedBayHeal workOrderEntry_MedBayHeal;
+                    WorkOrderEntry_MedBayHeal workOrderEntry_MedBayHeal = (WorkOrderEntry_MedBayHeal)___simState.MedBayQueue.GetSubEntry(unitResult.pilot.Description.Id);
                     ___simState.MedBayQueue.RemoveSubEntry(unitResult.pilot.Description.Id);
                 }
-
             }
         }
 
@@ -114,8 +114,9 @@ namespace Pilot_Fatigue
                 int FatigueTimeStart = settings.FatigueTimeStart;
                 int GutsValue = unitResult.pilot.Guts;
                 int TacticsValue = unitResult.pilot.Tactics;
-                SimGameState simstate = Traverse.Create(__instance).Field("simState").GetValue<SimGameState>();
-                int MoraleDiff = simstate.Morale - simstate.Constants.Story.StartingMorale;
+                //SimGameState simstate = Traverse.Create(__instance).Field("simState").GetValue<SimGameState>();
+                SimGameState simState = __instance.simState;
+                int MoraleDiff = simState.Morale - simState.Constants.Story.StartingMorale;
                 int MoraleModifier = 0;
 
                 if (MoraleDiff <= settings.MoraleNegativeTierTwo)
@@ -150,16 +151,14 @@ namespace Pilot_Fatigue
 
                 int MechDamageTime = (int)Math.Ceiling((1 - MechDamage) * settings.MechDamageMaxDays);
                 int argoReduction = 1;
-                var simState = Traverse.Create(__instance).Field("simState").GetValue<SimGameState>();
+                //var simState = Traverse.Create(__instance).Field("simState").GetValue<SimGameState>();
 
                 if (simState != null && settings.ArgoUpgradeReduction)
                 {
-                    var shipUpgrades = Traverse.Create(simState).Field("shipUpgrades").GetValue < List<ShipModuleUpgrade>>();
-                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argoUpgrade_rec_hydroponics"))))
-                        argoReduction++;
-                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argoUpgrade_rec_pool"))))
-                        argoReduction++;
-                    if (shipUpgrades.Any(u => u.Tags.Any(t => t.Contains("argoUpgrade_rec_arcade"))))
+                    //var shipUpgrades = Traverse.Create(simState).Field("shipUpgrades").GetValue < List<ShipModuleUpgrade>>();
+                    
+                    List<ShipModuleUpgrade> shipUpgrades = simState.shipUpgrades;
+                    if (shipUpgrades.Any(u => u.Tags.Any(t => argoUpgradeList.Contains(t))))
                         argoReduction++;
                 }
                 var rand = new System.Random();
@@ -192,9 +191,9 @@ namespace Pilot_Fatigue
                     float roll = UnityEngine.Random.Range(1, 100);
                     float GutCheck = 5 * GutsValue;
                     if (settings.QuirksEnabled && unitResult.pilot.pilotDef.PilotTags.Contains("pilot_gladiator"))
-                        GutCheck = GutCheck + 25;
+                        GutCheck += 25;
                     if (unitResult.pilot.pilotDef.PilotTags.Contains("PQ_pilot_green"))
-                        GutCheck = GutCheck + 25;
+                        GutCheck += 25;
 
 
                     int currenttime = unitResult.pilot.pilotDef.TimeoutRemaining;
@@ -210,7 +209,7 @@ namespace Pilot_Fatigue
 
                     if (roll > GutCheck && (settings.LightInjuriesOn))
                     {
-                        if (settings.BEXCE && simstate.Constants.Story.MaximumDebt != 42)
+                        if (settings.BEXCE && simState.Constants.Story.MaximumDebt != 42)
                             return;
 
                         unitResult.pilot.pilotDef.PilotTags.Add("pilot_lightinjury");
@@ -257,8 +256,10 @@ namespace Pilot_Fatigue
         {
             public static void Postfix(SimGameState __instance, List<TemporarySimGameResult> ___TemporaryResultTracker)
             {
-                List<Pilot> list = new List<Pilot>(__instance.PilotRoster);
-                list.Add(__instance.Commander);
+                List<Pilot> list = new List<Pilot>(__instance.PilotRoster)
+                {
+                    __instance.Commander
+                };
                 for (int j = 0; j < list.Count; j++)
                 {
                     Pilot pilot = list[j];
@@ -280,7 +281,7 @@ namespace Pilot_Fatigue
                     if (pilot.pilotDef.TimeoutRemaining == 0 && pilot.pilotDef.PilotTags.Contains("pilot_lightinjury"))
                     {
                         pilot.pilotDef.PilotTags.Remove("pilot_lightinjury");
-                        pilot.StatCollection.ModifyStat<int>("Light Injury Healed", 0, "Injuries", StatCollection.StatOperation.Set, 0, -1, true);
+                        pilot.StatCollection.ModifyStat("Light Injury Healed", 0, "Injuries", StatCollection.StatOperation.Set, 0, -1, true);
                     }
                     if (pilot.pilotDef.PilotTags.Contains("PF_pilot_morale_low"))
                     {
@@ -288,20 +289,24 @@ namespace Pilot_Fatigue
                         pilot.pilotDef.PilotTags.Add("pilot_morale_low");
 
                         var eventTagSet = new TagSet();
+                        //Traverse.Create(eventTagSet).Field("items").SetValue(new string[] { "pilot_morale_low" });
+                        //Traverse.Create(eventTagSet).Field("tagSetSourceFile").SetValue("Tags/PilotTags");
+                        //Traverse.Create(eventTagSet).Method("UpdateHashCode").GetValue();
+                        eventTagSet.items.Add("pilot_morale_low");
+                        eventTagSet.tagSetSourceFile = "Tags/PilotTags";
+                        eventTagSet.UpdateHashCode();
 
-                        Traverse.Create(eventTagSet).Field("items").SetValue(new string[] { "pilot_morale_low" });
-                        Traverse.Create(eventTagSet).Field("tagSetSourceFile").SetValue("Tags/PilotTags");
-                        Traverse.Create(eventTagSet).Method("UpdateHashCode").GetValue();
-
-                        var EventTime = new TemporarySimGameResult();
-                        EventTime.ResultDuration = settings.LowMoraleTime - 2;
-                        EventTime.Scope = EventScope.MechWarrior;
-                        EventTime.TemporaryResult = true;
-                        EventTime.AddedTags = eventTagSet;
-                        Traverse.Create(EventTime).Field("targetPilot").SetValue(pilot);
-
-                        Traverse.Create(__instance).Method("AddOrRemoveTempTags", new[] { typeof(TemporarySimGameResult), typeof(bool) }).
-                            GetValue(EventTime, true);
+                        var EventTime = new TemporarySimGameResult
+                        {
+                            ResultDuration = settings.LowMoraleTime - 2,
+                            Scope = EventScope.MechWarrior,
+                            TemporaryResult = true,
+                            AddedTags = eventTagSet
+                        };
+                        //Traverse.Create(EventTime).Field("targetPilot").SetValue(pilot);
+                        EventTime.targetPilot = pilot;
+                        //Traverse.Create(__instance).Method("AddOrRemoveTempTags", new[] { typeof(TemporarySimGameResult), typeof(bool) }).GetValue(EventTime, true);
+                        __instance.AddOrRemoveTempTags(EventTime, true);
                         ___TemporaryResultTracker.Add(EventTime);
                     }
                 }
@@ -378,7 +383,7 @@ namespace Pilot_Fatigue
                             {
                                 Penalty = (int)Math.Ceiling(TimeOut / settings.FatigueResolveFactor);
                             }
-                            __result = __result - Penalty;
+                            __result -= Penalty;
                             if (!settings.AllowNegativeResolve && __result < 0)
                                 __result = 0;
                         }
@@ -435,7 +440,7 @@ namespace Pilot_Fatigue
 
                 if (settings.InjuriesHurt)
                 {
-                    Penalty = Penalty + __instance.Injuries;
+                    Penalty += __instance.Injuries;
                 }
                 int NewValue = __result - Penalty;
                 if (NewValue < 1)
@@ -458,7 +463,7 @@ namespace Pilot_Fatigue
 
                 if (settings.InjuriesHurt)
                 {
-                    Penalty = Penalty + __instance.Injuries;
+                    Penalty += __instance.Injuries;
                 }
                 int NewValue = __result - Penalty;
 
@@ -484,7 +489,7 @@ namespace Pilot_Fatigue
 
                 if (settings.InjuriesHurt)
                 {
-                    Penalty = Penalty + __instance.Injuries;
+                    Penalty += __instance.Injuries;
                 }
                 int NewValue = __result - Penalty;
                 if (NewValue < 1)
